@@ -1,5 +1,5 @@
-import React from "react";
-import ReactDOM from "react-dom";
+// import React from "react";
+// import ReactDOM from "react-dom";
 
 // const element = (
 //   <div id="foo">
@@ -36,8 +36,24 @@ function createTextElement(text) {
   };
 }
 
+function render(element, container) {
+  const dom =
+    element.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(element.type);
+
+  const { children, ...props } = element.props;
+
+  Object.entries(props).forEach(([key, value]) => (dom[key] = value));
+
+  children.forEach((child) => render(child, dom));
+
+  container.appendChild(dom);
+}
+
 const Didact = {
   createElement,
+  render,
 };
 
 // const element = Didact.createElement(
@@ -57,4 +73,4 @@ const element = (
 
 const container = document.getElementById("root");
 
-ReactDOM.render(element, container);
+Didact.render(element, container);
