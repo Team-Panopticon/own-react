@@ -1,22 +1,57 @@
 import { dummy } from "./dummy";
 
-function createElement(type, props, ...children: Fiber[]): Fiber {
-  return {
+interface Props {
+  nodeValue?: string;
+  children: Fiber[];
+  [key: string]: any;
+}
+
+interface Fiber {
+  type: string;
+  props: Props;
+  /** Fiber (parentDom + parentSibling을 얻기 위해서) */
+  parentFiber?: Fiber;
+  /** 현재 Fiber의 HTMLElement */
+  dom?: HTMLElement | Text;
+  /** parentFiber.children[index] === 현재 Fiber */
+  index: number;
+}
+
+type FiberWithoutDom = Fiber;
+
+function createElement(type, props, ...children: Fiber[]): FiberWithoutDom {
+  const fiber = {
     type,
     props: {
       ...props,
-      children: children.map((child, i) => {
-        if (typeof child === "object") {
-          child.index = i;
-          return child;
-        } else {
-          return createTextElement(child, i);
-        }
-      }),
+      children,
     },
     index: 0,
   };
+
+  fiber.props.children = children.map((child, i) => {
+    if (typeof child === "object") {
+      child.index = i;
+      child.parentFiber = fiber;
+      return child;
+    } else {
+      const textEl = createTextElement(child, i);
+      textEl.parentFiber = fiber;
+      return textEl;
+    }
+  });
+
+  return fiber;
 }
+
+/*
+ * 1. const element = Didact.createElement(
+//   "div",
+//   { id: "foo" },
+//   Didact.createElement("a", null, "bar"),
+//   Didact.createElement("b")
+// );
+ */
 
 function createTextElement(text, index: number): Fiber {
   return {
@@ -29,9 +64,13 @@ function createTextElement(text, index: number): Fiber {
   };
 }
 
+/**
+ * render - nextUnifOfWork에 할당만
+ */
+
 // TODO: 2월 7일(수) - 첫 render를 부르는 시점에 nextOfUnitWork에 일이 할당되어야함.
 // 일이 어디서 할당되어야 하는지 고민이 필요하다 (분기 vs 분리)
-function render(fiber: Fiber, container: HTMLElement) {
+function renderDOM(fiber: FiberWithoutDom, container: HTMLElement) {
   const { type } = fiber;
 
   const dom =
@@ -48,6 +87,25 @@ function render(fiber: Fiber, container: HTMLElement) {
   return dom;
 }
 
+/** Root Element를 렌더링하는 함수 */
+function render(fiber: FiberWithoutDom, container: HTMLElement) {
+  /**
+   * 1. <element /> <- 요거를 그리려고하는거고
+   * 2. <div id='root'></div> <- root 최고 parentFiber
+   */
+
+  fiber.parentFiber = {
+    type: "root",
+    props: {
+      children: [fiber],
+    },
+    dom: container,
+    index: 0,
+  };
+
+  nextUnitOfWork = fiber;
+}
+
 // 1. createElement
 // 2. render
 //    - 어떻게 할당할 것인가?
@@ -61,31 +119,6 @@ function render(fiber: Fiber, container: HTMLElement) {
 //             -> G(C,1)
 //   -> C( ,1)
 //   -> D( ,2)
-interface Fiber {
-  type: string;
-  props: Props;
-  /** 현재 Fiber의 HTMLElement */
-  dom?: HTMLElement | Text;
-  /** Fiber (parentDom + parentSibling을 얻기 위해서) */
-  parentFiber?: Fiber;
-  /** parentFiber.children[index] === 현재 Fiber */
-  index: number;
-}
-
-// interface Fiber extends Element {
-//   /** 현재 Fiber의 HTMLElement */
-//   dom?: HTMLElement | Text;
-//   /** Fiber (parentDom + parentSibling을 얻기 위해서) */
-//   parentFiber?: Fiber;
-//   /** parentFiber.children[index] === 현재 Fiber */
-//   index: number;
-// }
-
-interface Props {
-  [key: string]: any;
-  nodeValue?: string;
-  children: Fiber[];
-}
 
 /** */
 function createFiber(fiber: Fiber): Fiber {
@@ -94,9 +127,11 @@ function createFiber(fiber: Fiber): Fiber {
 }
 
 let nextUnitOfWork: Fiber | null = null;
+// @ts-ignore
+window.getNextUnifOfWork = () => nextUnitOfWork;
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
-  const dom = render(
+  const dom = renderDOM(
     nextUnitOfWork,
     nextUnitOfWork.parentFiber.dom as HTMLElement
   ); // parentdom.appendchild(dom)
@@ -113,22 +148,32 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   const nextFiber = ((): Fiber | null => {
     const myChild = props.children[0];
     const mySibling = sibling[index + 1];
+    // const myParentSibling =
+    //   nextUnitOfWork.parentFiber.parentFiber?.[
+    //     nextUnitOfWork.parentFiber.index + 1
+    //   ];
+
+    /**
+     * Fiber에서 부모의 sibling을 직접 찾을 경우 부모의 부모 이상의 sibling을 렌더링해야도리 때 코드가 복잡해짐
+     */
     const myParentSibling =
-      nextUnitOfWork.parentFiber.parentFiber[
+      nextUnitOfWork.parentFiber.parentFiber?.props?.children?.[
         nextUnitOfWork.parentFiber.index + 1
       ];
 
     return myChild || mySibling || myParentSibling || null;
   })();
-
-  nextFiber && (nextFiber.parentFiber = nextUnitOfWork);
+  console.group("performUnitOfWork");
+  console.log("nextUnitOfWork", nextUnitOfWork);
+  console.log("nextFiber", nextFiber);
+  console.groupEnd();
 
   return nextFiber;
 }
 
 function workLoop(deadline) {
   let shouldYield = false;
-  debugger;
+
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
@@ -153,8 +198,11 @@ const Didact = {
 /** @jsx Didact.createElement */
 const element = (
   <div id="foo">
-    <a>This is A</a>
-    <c>this is C</c>
+    depth 1
+    <p>
+      depth 2 This is A<ab>depth 3 This is AB</ab>
+    </p>
+    <c>depth 2 this is C</c>
     <b />
   </div>
 );
