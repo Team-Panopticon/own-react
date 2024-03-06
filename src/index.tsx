@@ -91,6 +91,8 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
 //   -> D(null)
 
 let nextUnitOfWork: Fiber | null = null;
+let wipRoot: Fiber | null = null;
+
 // @ts-ignore
 window.getNextUnifOfWork = () => nextUnitOfWork;
 
@@ -120,7 +122,8 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
     }
   });
 
-  return nextUnitOfWork.props.children[0] || nextFiber;
+  const nextWork = nextUnitOfWork.props.children[0] || nextFiber;
+  return nextWork;
 }
 
 function workLoop(deadline) {
@@ -129,9 +132,12 @@ function workLoop(deadline) {
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
-  }
-  if (!nextUnitOfWork) {
-    // done
+    console.log("============= ", nextUnitOfWork);
+    if (!nextUnitOfWork?.nextFiber) {
+      // done
+      console.log("============= done", nextUnitOfWork);
+      return;
+    }
   }
   requestIdleCallback(workLoop);
 }
@@ -161,13 +167,13 @@ const element = (
     <c>depth 2 this is C</c>
     <br />
     tt
-    <div id="foo">
-      depth 1
+    <div id="bar">
+      depth 1-1
       <p>
-        depth 2 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This is
-        A<ab>depth 3 This is AB</ab> depth 2 Th
+        depth 2-1 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This
+        is A<ab>depth 3 This is AB</ab> depth 2 Th
       </p>
-      <c>depth 2 this is C</c>
+      <c>depth 2-1 this is C</c>
       <br />
       tt
     </div>
@@ -179,12 +185,12 @@ const container = document.getElementById("root");
 Didact.render(element, container);
 
 /**
- * TODO: 2월 21(수) - 기록
- * - 엣지 케이스가 없을까?
- * - render와 renderDom을 합칠 수 있을지?
- *  - 실제 코드랑 비교해보기
- *    - nextFiber를 저장하는 구조일까?
- *    - child가 없을 때 nextFiber를 렌더링하는 구조일까?
- *    - render와 renderDom이 하나인지?
+ * TODO: 3월 6(수) - 기록
+ * - wipRoot를 어디서 어떻게 초기화 할것인가 wip = null?
+ *   렌더링 시작 할 때 초기화를 해줘야한다.
+ *   render 메소드?
  *
+ * - workLoop에서 렌더링 종료 후 분기 칠 때 최상위 Fiber를 어떻게 알 것인가
+ *   - 최상위 Fiber를 전역으로 추가하는건 좀 이상...???
+ *   - while문 안에서 nextFiber가 없을 때?
  */
