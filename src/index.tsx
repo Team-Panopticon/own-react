@@ -6,11 +6,11 @@ interface Props {
   [key: string]: any;
 }
 
-interface Fiber {
+interface Fiber<T = HTMLElement | Text> {
   type: string;
   props: Props;
   /** 현재 Fiber의 HTMLElement */
-  dom?: HTMLElement | Text;
+  dom?: T;
   /** parent의 DOM */
   container?: HTMLElement;
   nextFiber?: Fiber;
@@ -49,7 +49,7 @@ function createTextElement(text): Fiber {
   };
 }
 
-function renderDOM(fiber: FiberWithoutDom) {
+function createDOM(fiber: FiberWithoutDom) {
   const { type, nextFiber } = fiber;
 
   const dom =
@@ -59,22 +59,7 @@ function renderDOM(fiber: FiberWithoutDom) {
 
   const { children, ...props } = fiber.props;
 
-  children.forEach((child, i) => {
-    if (i === children.length - 1) {
-      child.nextFiber = nextFiber;
-    } else {
-      child.nextFiber = children[i + 1];
-    }
-    if (type !== "TEXT_ELEMENT") {
-      // TO-DO
-      // @ts-ignore
-      child.container = dom;
-    }
-  });
-
   Object.entries(props).forEach(([key, value]) => (dom[key] = value));
-
-  fiber.container.appendChild(dom);
 
   return dom;
 }
@@ -109,11 +94,31 @@ let nextUnitOfWork: Fiber | null = null;
 // @ts-ignore
 window.getNextUnifOfWork = () => nextUnitOfWork;
 
-function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
-  const dom = renderDOM(nextUnitOfWork); // parentdom.appendchild(dom)
-  nextUnitOfWork.dom = dom;
+function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
+  return fiber.type !== "TEXT_ELEMENT" ? true : false;
+}
 
-  const { props, nextFiber } = nextUnitOfWork;
+function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
+  const dom = createDOM(nextUnitOfWork); // parentdom.appendchild(dom)
+
+  nextUnitOfWork.dom = dom;
+  nextUnitOfWork.container.appendChild(dom);
+
+  const {
+    nextFiber,
+    props: { children },
+  } = nextUnitOfWork;
+
+  children.forEach((child, i) => {
+    if (i === children.length - 1) {
+      child.nextFiber = nextFiber;
+    } else {
+      child.nextFiber = children[i + 1];
+    }
+    if (isHTMLElement(nextUnitOfWork)) {
+      child.container = nextUnitOfWork.dom;
+    }
+  });
 
   return nextUnitOfWork.props.children[0] || nextFiber;
 }
@@ -124,6 +129,9 @@ function workLoop(deadline) {
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
+  }
+  if (!nextUnitOfWork) {
+    // done
   }
   requestIdleCallback(workLoop);
 }
