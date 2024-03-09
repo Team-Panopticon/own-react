@@ -6,13 +6,13 @@ interface Props {
   [key: string]: any;
 }
 
-interface Fiber<T = HTMLElement | Text> {
+interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   type: string;
   props: Props;
   /** 현재 Fiber의 HTMLElement */
   dom?: T;
   /** parent의 DOM */
-  container?: HTMLElement;
+  container?: HTMLElement | DocumentFragment;
   nextFiber?: Fiber;
 }
 
@@ -66,7 +66,18 @@ function createDOM(fiber: FiberWithoutDom) {
 
 /** Root Element를 렌더링하는 함수 */
 function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
-  fiber.container = rootElement;
+  // 1. rootElement을 어디다가 둘 것 인가
+
+  wipRoot = {
+    type: "",
+    props: {
+      children: [],
+    },
+    dom: document.createDocumentFragment(),
+    container: rootElement,
+  };
+  fiber.container = wipRoot.dom as DocumentFragment;
+
   nextUnitOfWork = fiber;
 }
 
@@ -132,12 +143,14 @@ function workLoop(deadline) {
   while (nextUnitOfWork && !shouldYield) {
     nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
     shouldYield = deadline.timeRemaining() < 1;
-    console.log("============= ", nextUnitOfWork);
-    if (!nextUnitOfWork?.nextFiber) {
-      // done
-      console.log("============= done", nextUnitOfWork);
-      return;
-    }
+  }
+
+  // nextUnitOfWork가 없을 경우 가상 DOM에 렌더링 완료
+  // commit
+  if (!nextUnitOfWork) {
+    wipRoot.container.replaceChildren(wipRoot.dom);
+    wipRoot = null;
+    return;
   }
   requestIdleCallback(workLoop);
 }
@@ -190,7 +203,7 @@ Didact.render(element, container);
  *   렌더링 시작 할 때 초기화를 해줘야한다.
  *   render 메소드?
  *
- * - workLoop에서 렌더링 종료 후 분기 칠 때 최상위 Fiber를 어떻게 알 것인가
+ * - workLoop에서 렌더링(가상돔) 종료 후 분기(실제 DOM 렌더링) 칠 때 최상위 Fiber를 어떻게 알 것인가
  *   - 최상위 Fiber를 전역으로 추가하는건 좀 이상...???
  *   - while문 안에서 nextFiber가 없을 때?
  */
