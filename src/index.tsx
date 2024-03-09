@@ -198,12 +198,11 @@ const container = document.getElementById("root");
 Didact.render(element, container);
 
 /**
- * TODO: 3월 6(수) - 기록
- * - wipRoot를 어디서 어떻게 초기화 할것인가 wip = null?
- *   렌더링 시작 할 때 초기화를 해줘야한다.
- *   render 메소드?
+ * TODO: 3월 9(토) 기록
+ * 피그마: https://www.figma.com/file/luPXN9RuboNhjiGBbrTMip/Untitled?type=whiteboard&node-id=0%3A1&t=TpBGQaDjvqaol1OR-1
  *
- * - workLoop에서 렌더링(가상돔) 종료 후 분기(실제 DOM 렌더링) 칠 때 최상위 Fiber를 어떻게 알 것인가
- *   - 최상위 Fiber를 전역으로 추가하는건 좀 이상...???
- *   - while문 안에서 nextFiber가 없을 때?
+ * 1. 렌더링 순서 (DOM에 붙이는거) -> 자식이 부모의 DOM에 직접 붙여야한다 ( fiber에 parent를 들고있어야한다??)
+ *
+ *
+ * 2. 가상 DOM이 변경되면 실제 DOM에 반영한다.(커밋한다)
  */
