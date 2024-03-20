@@ -14,6 +14,9 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   /** parent의 DOM */
   container?: HTMLElement | DocumentFragment;
   nextFiber?: Fiber;
+
+  /** root는 parent가 없음 */
+  parent?: Fiber;
 }
 
 type FiberWithoutDom = Fiber;
@@ -106,13 +109,30 @@ let wipRoot: Fiber | null = null;
 
 // @ts-ignore
 window.getNextUnifOfWork = () => nextUnitOfWork;
+// @ts-ignore
+window.setNextUnitOfWork = (fiber) => {
+  nextUnitOfWork = fiber;
+};
 
 function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
+  // 탐색하는 로직을 여기에 같이 넣어버린다면 아래처럼 분기가 됨
+  // if(있음){
+  //   continue;
+  // }else(){
+  //   렌더링
+  // }
+
+  console.log("==== perforn unit of work", nextUnitOfWork);
   const dom = createDOM(nextUnitOfWork); // parentdom.appendchild(dom)
+
+  if (nextUnitOfWork.props.id === "bar") {
+    // @ts-ignore
+    window.temp = nextUnitOfWork;
+  }
 
   nextUnitOfWork.dom = dom;
   nextUnitOfWork.container.appendChild(dom);
@@ -155,6 +175,8 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 
+// @ts-ignore
+window.startLoop = () => requestIdleCallback(workLoop);
 requestIdleCallback(workLoop);
 
 const Didact = {
@@ -198,11 +220,28 @@ const container = document.getElementById("root");
 Didact.render(element, container);
 
 /**
- * TODO: 3월 9(토) 기록
+ * TODO: 3월 20(수) 기록
  * 피그마: https://www.figma.com/file/luPXN9RuboNhjiGBbrTMip/Untitled?type=whiteboard&node-id=0%3A1&t=TpBGQaDjvqaol1OR-1
  *
- * 1. 렌더링 순서 (DOM에 붙이는거) -> 자식이 부모의 DOM에 직접 붙여야한다 ( fiber에 parent를 들고있어야한다??)
+ * - 렌더링 순서 (DOM에 붙이는거) -> 자식이 부모의 DOM에 직접 붙여야한다 ( fiber에 parent를 들고있어야한다??)
  *
+ * - 텍스트 바뀌었을 때 리렌더링 되도록 구현해보기 (리랜더링 테스트용)
+ * - 렌더링할 때 단순히 appendChild하면 새로운 Fiber가 appendChild 되버림
+ * - wipRoot 할당해주는거 빼야됨 (리랜더링 할 때 root가 없으므로) but wipRoot가 리랜더링 해야되는 부모로 할 수 있을까...?
+ * - 변경사항이 있는 경우에만 렌더링을 실행하도록 해야함
+ * - 변경사항 -> 일단 perfornUnitOfWork에서 해버리기 (생각하는걸 줄이기 위해서)
+ */
+
+/**
+ * 기존 구조
+ * - Fiber에서 다음에 렌더링 할 Fiber를 가지고 있음(nextFiber)
+ * - 현재 Fiber를 처리하면서 nextFiber를 결정
  *
- * 2. 가상 DOM이 변경되면 실제 DOM에 반영한다.(커밋한다)
+ * 변경
+ * - Fiber에서 Parent를 들고 있음
+ * -
+ *
+ * 1. parent 추가
+ * 2. 자식이 부모에게 dom 직접 붙힌다.(parent를 사용해서)
+ * 3. 바뀐 렌더링 구조에서 parent가 nextFiber의 역할을 할 수 있는지 확인 후 로직 수정
  */
