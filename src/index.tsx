@@ -105,7 +105,21 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
 //   -> D(null)
 
 let nextUnitOfWork: Fiber | null = null;
-let wipRoot: Fiber | null = null;
+let wipRoot: Fiber | null = null; // 돔에 변경사항이 생겼을때 교정할거
+let currentRoot: Fiber | null = null; // currentRoot -> 완성이 되어있어있고 실제돔에도 적용되어 있음.
+
+// wipRoot[A] - alternate - currontRoot[A] 새로 생긴 친구
+
+// render(element) -> wipRoot
+// render(element') -> wipRoot
+
+// element -> diact.createElement -> dom이 없는 fiber tree - 이전 돔 -> current
+// element' -> diact.creatElement -> dom이 없는 fiber tree - 새롭게 돔이 추가됨. -> wipRoot 조정.
+
+// wipRoot 새로 만들지 않는다?
+
+// 초기단계 -> wipRoot -> currentRoot
+// -> wipRoot->alternate
 
 // @ts-ignore
 window.getNextUnifOfWork = () => nextUnitOfWork;
@@ -220,9 +234,14 @@ const container = document.getElementById("root");
 Didact.render(element, container);
 
 /**
- * TODO: 3월 20(수) 기록
+ * TODO: 3월 23(토) 기록
  * 피그마: https://www.figma.com/file/luPXN9RuboNhjiGBbrTMip/Untitled?type=whiteboard&node-id=0%3A1&t=TpBGQaDjvqaol1OR-1
  *
+ * - node가 변경됐을때 새로운 트리가 만들어지는게 아니고 wipRoot에 추가되는 것으로 생각하고 구현해야하는가? => 어떻게 구현할것인지 고민이 필요하다
+ *
+ */
+
+/**
  * - 렌더링 순서 (DOM에 붙이는거) -> 자식이 부모의 DOM에 직접 붙여야한다 ( fiber에 parent를 들고있어야한다??)
  *
  * - 텍스트 바뀌었을 때 리렌더링 되도록 구현해보기 (리랜더링 테스트용)
@@ -232,16 +251,22 @@ Didact.render(element, container);
  * - 변경사항 -> 일단 perfornUnitOfWork에서 해버리기 (생각하는걸 줄이기 위해서)
  */
 
-/**
- * 기존 구조
- * - Fiber에서 다음에 렌더링 할 Fiber를 가지고 있음(nextFiber)
- * - 현재 Fiber를 처리하면서 nextFiber를 결정
- *
- * 변경
- * - Fiber에서 Parent를 들고 있음
- * -
- *
- * 1. parent 추가
- * 2. 자식이 부모에게 dom 직접 붙힌다.(parent를 사용해서)
- * 3. 바뀐 렌더링 구조에서 parent가 nextFiber의 역할을 할 수 있는지 확인 후 로직 수정
- */
+// ========== 블로그에 있는 내용임 =============
+//
+// 디액트에서는 렌더 단계의 모든 트리를 순회하지만 실제 리액트는 대신 특정한 힌트만을 따라가며 변하지 않은 서브 트리는 휴리스틱하게 뛰어넘습니다.
+// 디액트는 커밋 단계에서도 모든 트리를 순회합니다. 하지만 리액트는 영향이 가는 fiber들의 연결 리스트를 유지하여 해당 fiber만 방문합니다.
+// 작업중(wip)인 트리를 생성할 때마다 우리는 각 fiber에 새로운 객체를 생성했지만, 리액트는 이전의 트리에서 가져온 fiber를 재사용합니다.
+// 디액트는 렌더 단계에서 새로운 갱신을 얻을 때 작업중(wip)인 트리를 버리고 루트에서부터 새로 시작하지만, 리액트는 각 갱신의 만료 타임스탬프를 표시해두고, 갱신시 이를 높은 우선순위로 참고하여 결정합니다.
+// 그 외에도 많은 것들이 다릅니다.
+
+// if (element && !sameType) {
+//   newFiber = {
+//     type: element.type,
+//     props: element.props,
+//     dom: null,
+//     parent: wipFiber,
+//     alternate: null,
+//     effectTag: "PLACEMENT", || 'DELETION' || "UPDATE"
+//   }
+// }
+// ==========================================
