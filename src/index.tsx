@@ -17,6 +17,8 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
 
   /** root는 parent가 없음 */
   parent?: Fiber;
+  alternate?: Fiber;
+  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE";
 }
 
 type FiberWithoutDom = Fiber;
@@ -78,8 +80,11 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
     },
     dom: document.createDocumentFragment(),
     container: rootElement,
+    alternate: currentRoot,
   };
+
   fiber.container = wipRoot.dom as DocumentFragment;
+  fiber.parent = wipRoot;
 
   nextUnitOfWork = fiber;
 }
@@ -133,12 +138,26 @@ function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
 }
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
-  // 탐색하는 로직을 여기에 같이 넣어버린다면 아래처럼 분기가 됨
-  // if(있음){
-  //   continue;
-  // }else(){
-  //   렌더링
-  // }
+  // 1번째
+  // <div id="foo" />
+  // wipRoot.children[0]
+  // parent.alternate
+  //   '  '
+  // parent.alternate.children = [1, 2 ,3]
+  // wipRoot.children =          [1, 2(deletion), 3(placement)]
+  // wipRoot.children =          [1, 0, 2, 3]
+
+  /**
+   * @TODO 3월 30일 (토)
+   * - children끼리 비교할 때, 어떤 child가 삭제, 수정, 추가 되었는지
+   *   비교할 수 있는 n^2이 아닌 알고리즘이 필요하다.
+   *
+   * - 1, 2, 3 -> 1, 0, 2, 3일 때 2, 3은 PLACEMENT인가?
+   *   react 배열 렌더링할 때 PLACEMENT인데 리랜더링 방지해주기 위해 key가 필요한게 아닐까?
+   */
+
+  // 없음 -> PLACEMENT
+  nextUnitOfWork.parent.alternate.props.children.forEach((child) => {});
 
   console.log("==== perforn unit of work", nextUnitOfWork);
   const dom = createDOM(nextUnitOfWork); // parentdom.appendchild(dom)
@@ -156,8 +175,29 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
     props: { children },
   } = nextUnitOfWork;
 
+  // nextUnitOfWork, alternate
+  // nextUnitOfWork alternate 비교해야함
+  // effectTag를 어디에 마킹해야하는가 -> nextUnitOfWork
+  //
+
+  // const elements = fiber.props.children
+  // // 새로운 fiber를 생성하는 코드를 reconcileChildren 내부로 옮깁니다.
+  // reconcileChildren(fiber, elements)
+
+  // function reconcileChildren(wipFiber, elements) {
+  // wipRoot.alternate === currentRoot
+  // let oldFiber =
+  // wipFiber.alternate && wipFiber.alternate.child
+  //
+  // const elements = nextUnitOfWork.props.children
+  // while (
+  //   index < elements.length ||
+  //   oldFiber != null
+  // )
+
   children.forEach((child, i) => {
     if (i === children.length - 1) {
+      // child.alternate = nextUnitOfWork.alternate.props.child[i];
       child.nextFiber = nextFiber;
     } else {
       child.nextFiber = children[i + 1];
@@ -183,6 +223,7 @@ function workLoop(deadline) {
   // commit
   if (!nextUnitOfWork) {
     wipRoot.container.replaceChildren(wipRoot.dom);
+    currentRoot = wipRoot;
     wipRoot = null;
     return;
   }
@@ -230,14 +271,39 @@ const element = (
 );
 
 const container = document.getElementById("root");
-
 Didact.render(element, container);
+
+/** @jsx Didact.createElement */
+var element2 = (
+  <div id="foo">
+    depth 1
+    <p>
+      depth 2 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This is A
+      <ab>depth 3 This is AB</ab> depth 2 Th
+    </p>
+    <c>depth 2 this is C</c>
+    <br />
+    tt
+    <div id="bar">
+      depth 1-1
+      <p>
+        depth 2-1 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This
+        is A<ab>depth 3 This is AB</ab> depth 2 Th
+      </p>
+      <c>depth 2-1 this is C</c>
+      <br />
+      tt
+    </div>
+  </div>
+);
 
 /**
  * TODO: 3월 23(토) 기록
  * 피그마: https://www.figma.com/file/luPXN9RuboNhjiGBbrTMip/Untitled?type=whiteboard&node-id=0%3A1&t=TpBGQaDjvqaol1OR-1
  *
  * - node가 변경됐을때 새로운 트리가 만들어지는게 아니고 wipRoot에 추가되는 것으로 생각하고 구현해야하는가? => 어떻게 구현할것인지 고민이 필요하다
+ * - 새로운 트리가 만들어지면, 이전 트리랑 비교해야함
+ * -
  *
  */
 
@@ -263,10 +329,23 @@ Didact.render(element, container);
 //   newFiber = {
 //     type: element.type,
 //     props: element.props,
-//     dom: null,
+//     dom: ,
 //     parent: wipFiber,
-//     alternate: null,
+//     alternate: id=1, => current에 있는 fiber
 //     effectTag: "PLACEMENT", || 'DELETION' || "UPDATE"
 //   }
 // }
 // ==========================================
+
+/**
+ * wipRoot 트리
+ * 1. wip Tree vs 만들고 있는 tree
+ * 2. wipRoot에 새로운 트리가 완성이 됨. (만들고 있는 tree가 wipTree에 반영이 됨)
+ * 3. wipRoot를 다시 비교
+ */
+
+// current / wip
+
+// 1. 'UPDATE' : oldFiber와 새로운 엘리먼트의 타입이 같다면, DOM 노드를 유지하고 새로운 props만 업데이트 합니다.
+// 2. 'PLACEMENT': 타입이 다르면서 새로운 엘리먼트가 존재한다면, 새로운 DOM 노드를 생성합니다.
+// 3. 'DELETION' : 타입이 다르면서 oldFiber가 존재한다면, 해당 DOM 노드를 삭제합니다.
