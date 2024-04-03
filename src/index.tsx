@@ -18,7 +18,7 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   /** root는 parent가 없음 */
   parent?: Fiber;
   alternate?: Fiber;
-  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE";
+  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE" | null;
 }
 
 type FiberWithoutDom = Fiber;
@@ -71,22 +71,16 @@ function createDOM(fiber: FiberWithoutDom) {
 
 /** Root Element를 렌더링하는 함수 */
 function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
-  // 1. rootElement을 어디다가 둘 것 인가
-
   wipRoot = {
     type: "",
     props: {
-      children: [],
+      children: [fiber],
     },
-    dom: document.createDocumentFragment(),
-    container: rootElement,
+    dom: rootElement,
     alternate: currentRoot,
   };
 
-  fiber.container = wipRoot.dom as DocumentFragment;
-  fiber.parent = wipRoot;
-
-  nextUnitOfWork = fiber;
+  nextUnitOfWork = wipRoot;
 }
 
 // 1. createElement
@@ -137,28 +131,32 @@ function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
+// 1번째
+// <div id="foo" />
+// wipRoot.children[0]
+// parent.alternate
+//   '  '
+// parent.alternate.children = [1, 2, 3]
+// wipRoot.children =          [1, 0, 2, 3]
+// wipRoot.children =          [1, 2(deletion), 3(placement)]
+/**
+ * 1 - update
+ * 0 - placement
+ * 2 - (remove & placement) vs update  || // 2 - Remove // 2'- palacement
+ * 3 - (remove & placement) vs update  || // 3 - remove // 3'- placement
+ */
+
+/**
+ * @TODO 3월 30일 (토)
+ * - children끼리 비교할 때, 어떤 child가 삭제, 수정, 추가 되었는지
+ *   비교할 수 있는 n^2이 아닌 알고리즘이 필요하다.
+ *
+ * - 1, 2, 3 -> 1, 0, 2, 3일 때 2, 3은 PLACEMENT인가? => UPDATE
+ *   react 배열 렌더링할 때 PLACEMENT인데 리랜더링 방지해주기 위해 key가 필요한게 아닐까?
+ */
+
+// 없음 -> PLACEMENT
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
-  // 1번째
-  // <div id="foo" />
-  // wipRoot.children[0]
-  // parent.alternate
-  //   '  '
-  // parent.alternate.children = [1, 2 ,3]
-  // wipRoot.children =          [1, 2(deletion), 3(placement)]
-  // wipRoot.children =          [1, 0, 2, 3]
-
-  /**
-   * @TODO 3월 30일 (토)
-   * - children끼리 비교할 때, 어떤 child가 삭제, 수정, 추가 되었는지
-   *   비교할 수 있는 n^2이 아닌 알고리즘이 필요하다.
-   *
-   * - 1, 2, 3 -> 1, 0, 2, 3일 때 2, 3은 PLACEMENT인가?
-   *   react 배열 렌더링할 때 PLACEMENT인데 리랜더링 방지해주기 위해 key가 필요한게 아닐까?
-   */
-
-  // 없음 -> PLACEMENT
-  nextUnitOfWork.parent.alternate.props.children.forEach((child) => {});
-
   console.log("==== perforn unit of work", nextUnitOfWork);
   const dom = createDOM(nextUnitOfWork); // parentdom.appendchild(dom)
 
@@ -168,7 +166,7 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   }
 
   nextUnitOfWork.dom = dom;
-  nextUnitOfWork.container.appendChild(dom);
+  // nextUnitOfWork.container.appendChild(dom);
 
   const {
     nextFiber,
@@ -185,15 +183,59 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   // reconcileChildren(fiber, elements)
 
   // function reconcileChildren(wipFiber, elements) {
-  // wipRoot.alternate === currentRoot
-  // let oldFiber =
-  // wipFiber.alternate && wipFiber.alternate.child
+  // wipRoot.alternate === currentRoot;
+  // let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   //
-  // const elements = nextUnitOfWork.props.children
-  // while (
-  //   index < elements.length ||
-  //   oldFiber != null
-  // )
+  // 1. wipRoot를 부모로 하는 fiber
+  // 2. wipRoot alternate = currentRoot
+  // 3. nextUnitOfWork = fiber -> alternate가 없다;
+
+  /** @TODO Effect Tag 설정해주기! */
+  // performUnitWork -> effectTag
+
+  // wipRoot || currentRoot
+  // nextOfUnitWork
+  // <div id="root"></div>
+  // <div> id="root"></div>
+
+  // wipRoot만 자기 자신의 alternate를
+  // 부모가 자신의 alternate를 세팅해주면
+
+  // 1, 2, 3, 4, 5  // alt
+  // 1, 0, 2, 3 -> 그릴때 currentRoot를 커밋
+
+  let index = 0;
+  let oldFiber = nextUnitOfWork.alternate.props.children[index];
+  const elements = nextUnitOfWork.props.children;
+
+  /**
+   * 240403
+   * NUOF.alternate.props.children과 NUOF.props.child을 비교해야한다.
+   *
+   * 비교하면서 effectTag를 저장해줘야 한다.
+   *
+   * 커서(index)를 두 개 사용해야하는가?
+   */
+  while (index < elements.length || oldFiber != null) {
+    const target = elements[index]; // oldFiber랑 비교
+
+    /**
+     * 1. placement 추가
+     * 2. deletion 삭제
+     * 3. update 갱신
+     * 4. null 변화없음
+     * type을 비교하고,
+     *
+     */
+
+    if (target.props.id === oldFiber.props.id) {
+      target.effectTag = null;
+      index++;
+      continue;
+    } else {
+    }
+    //작업
+  }
 
   children.forEach((child, i) => {
     if (i === children.length - 1) {
@@ -202,6 +244,9 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
     } else {
       child.nextFiber = children[i + 1];
     }
+
+    child.parent = nextUnitOfWork;
+
     if (isHTMLElement(nextUnitOfWork)) {
       child.container = nextUnitOfWork.dom;
     }
