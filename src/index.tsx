@@ -13,8 +13,7 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   dom?: T;
   /** parent의 DOM */
   container?: HTMLElement | DocumentFragment;
-  nextFiber?: Fiber;
-
+  sibling?: Fiber;
   /** root는 parent가 없음 */
   parent?: Fiber;
   alternate?: Fiber;
@@ -55,14 +54,12 @@ function createTextElement(text): Fiber {
 }
 
 function createDOM(fiber: FiberWithoutDom) {
-  const { type, nextFiber } = fiber;
+  const { type } = fiber;
 
   const dom = (() => {
     switch (type) {
       case "TEXT_ELEMENT":
         return document.createTextNode("");
-      case "DOCUMENT_FRAGMENT":
-        return document.createDocumentFragment();
       default:
         return document.createElement(type);
     }
@@ -97,40 +94,74 @@ function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
+function commitRoot() {}
+
+function commitWork() {}
+
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   console.log("==== perforn unit of work", nextUnitOfWork);
-  const dom = createDOM(nextUnitOfWork); // parentdom.appendchild(dom)
 
-  if (nextUnitOfWork.props.id === "bar") {
-    // @ts-ignore
-    window.temp = nextUnitOfWork;
+  // wipRoot일 경우 createDom을 해주지 않으려고 (wipRoot.dom에 rootElement가 이미 있어서서
+  if (!nextUnitOfWork.dom) {
+    nextUnitOfWork.dom = createDOM(nextUnitOfWork);
   }
 
-  nextUnitOfWork.dom = dom;
-  nextUnitOfWork.container.appendChild(dom);
+  /**
+   * wipRoot일 때 parent가 없으니까 에러 방지
+   * @TODO
+   * commit 으로 이동
+   */
+  if (nextUnitOfWork.parent) {
+    nextUnitOfWork.parent.dom.appendChild(nextUnitOfWork.dom);
+  }
 
   const {
-    nextFiber,
     props: { children },
   } = nextUnitOfWork;
 
-  children.forEach((child, i) => {
-    if (i === children.length - 1) {
-      // child.alternate = nextUnitOfWork.alternate.props.child[i];
-      child.nextFiber = nextFiber;
-    } else {
-      child.nextFiber = children[i + 1];
-    }
+  // nextFiber로직을 parent와 sibling으로 해결해야함
 
+  children.forEach((child, i) => {
+    child.sibling = children[i + 1];
     child.parent = nextUnitOfWork;
 
     if (isHTMLElement(nextUnitOfWork)) {
       child.container = nextUnitOfWork.dom;
     }
   });
+  /**
+   * 1. 내 자식
+   * 2. 내 sibling
+   * 3. 부모의 sibling
+   */
 
-  const nextWork = nextUnitOfWork.props.children[0] || nextFiber;
-  return nextWork;
+  // 내 자식이 방문된 놈인지 아닌지 알아야함
+  // dom이 생성되었는지 여부?
+
+  if (nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling) {
+    return nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling;
+  }
+
+  // parent를 타고 올라간다.parent의 sibling이 있는 지점에서 멈춘다.
+  let nextWork = nextUnitOfWork.parent;
+
+  // 블로그 코드
+  // let nextFiber = fiber
+  // while (nextFiber) {
+  //   if (nextFiber.sibling) {
+  //     return nextFiber.sibling
+  //   }
+  //   nextFiber = nextFiber.parent
+  // }
+
+  while (true) {
+    if (nextWork.sibling) {
+      return nextWork.sibling;
+    }
+
+    if (!nextWork.parent) return;
+    nextWork = nextWork.parent;
+  }
 }
 
 function workLoop(deadline) {
@@ -144,7 +175,6 @@ function workLoop(deadline) {
   // nextUnitOfWork가 없을 경우 가상 DOM에 렌더링 완료
   // commit
   if (!nextUnitOfWork) {
-    wipRoot.container.replaceChildren(wipRoot.dom);
     currentRoot = wipRoot;
     wipRoot = null;
     return;
@@ -188,19 +218,21 @@ const element = (
 /** @jsx Didact.createElement */
 const rootEl = document.getElementById("root");
 
-const updateValue = (e) => {
-  rerender(e.target.value);
-};
+Didact.render(element, rootEl);
 
-const rerender = (value) => {
-  const element = (
-    <div>
-      <input onInput={updateValue} value={value} />
-      <h2>Hello {value}</h2>
-    </div>
-  );
+// const updateValue = (e) => {
+//   rerender(e.target.value);
+// };
 
-  Didact.render(element, rootEl);
-};
+// const rerender = (value) => {
+//   const element = (
+//     <div>
+//       <input onInput={updateValue} value={value} />
+//       <h2>Hello {value}</h2>
+//     </div>
+//   );
 
-rerender("World");
+//   Didact.render(element, rootEl);
+// };
+
+// rerender("World");
