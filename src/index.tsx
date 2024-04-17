@@ -17,7 +17,7 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   /** root는 parent가 없음 */
   parent?: Fiber;
   alternate?: Fiber;
-  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE" | null;
+  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE";
 }
 
 type FiberWithoutDom = Fiber;
@@ -129,6 +129,54 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
       child.container = nextUnitOfWork.dom;
     }
   });
+
+  const { alternate } = nextUnitOfWork;
+
+  // Fiber child === children[0]
+  // Fiber child.sibling === children[1]
+  // Fiber child.sibling.sibling === children[2]
+  // Fiber child.sibling.sibling.sibling === children[3]
+  // Fiber child.sibling.sibling.sibling.sibling ==> undefined
+
+  // Cursor를 sibling기반으로 찾아준다.
+  // currentRoot에 effect를 달아준다.
+  let currentCursor = alternate.props.children[0]; // 기준
+  let wipCursor = children[0]; // 비교대상
+
+  while (currentCursor || wipCursor) {
+    // 1. DELETION -> wip.sibling.sibling...에서 type이 같은걸 못찾았을 때, currentCursor는 DELETION이다
+    // 2. PLACEMENT -> current wip type이 다름
+    // 3. UPDATE -> wip.type === current.type
+  }
+  // type, (props, state, component name)
+  // a b c(UPDATE -> d) d(DELETION) e(DELETION)
+  // a b d undefined undefiend
+
+  // child.index ???
+
+  // update로 다 쳐버리고 나중에 개선하자?
+
+  // <div>
+  //   <a>aaa</a>
+  //   <b>bbb</b>
+  //   <c>ccc</c>
+  //   <d>ddd</d>
+  //   <e>eee</e> // ??
+  // </div>
+
+  // <div>
+  //   <h>hhh</h>
+  //   <a>aaa</a>
+  //   <b>bbb</b>
+  //   <d>ddd</d>
+  //   <f>fff</f>
+  // </div>
+
+  // PLACEMENT - 추가 - t
+  // DELETION  - 삭제 -
+  // UPDATE    - 갱신 - typE 은 같으나 props가 다를경우
+  // 0  1  2  3 <- currentRoot
+  // 0  1' 2  3 <- wipRoot
 
   if (nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling) {
     return nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling;
