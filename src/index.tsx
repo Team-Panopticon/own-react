@@ -94,9 +94,18 @@ function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
-function commitRoot() {}
+function commitRoot() {
+  commitWork(wipRoot.props.children[0]);
 
-function commitWork() {}
+  wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
+}
+
+function commitWork(currentFiber: Fiber) {
+  currentFiber.props.children.forEach((child) => {
+    commitWork(child);
+  });
+  currentFiber.parent.dom.appendChild(currentFiber.dom);
+}
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   console.log("==== perforn unit of work", nextUnitOfWork);
@@ -104,15 +113,6 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   // wipRoot일 경우 createDom을 해주지 않으려고 (wipRoot.dom에 rootElement가 이미 있어서서
   if (!nextUnitOfWork.dom) {
     nextUnitOfWork.dom = createDOM(nextUnitOfWork);
-  }
-
-  /**
-   * wipRoot일 때 parent가 없으니까 에러 방지
-   * @TODO
-   * commit 으로 이동
-   */
-  if (nextUnitOfWork.parent) {
-    nextUnitOfWork.parent.dom.appendChild(nextUnitOfWork.dom);
   }
 
   const {
@@ -129,14 +129,6 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
       child.container = nextUnitOfWork.dom;
     }
   });
-  /**
-   * 1. 내 자식
-   * 2. 내 sibling
-   * 3. 부모의 sibling
-   */
-
-  // 내 자식이 방문된 놈인지 아닌지 알아야함
-  // dom이 생성되었는지 여부?
 
   if (nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling) {
     return nextUnitOfWork.props.children[0] || nextUnitOfWork.sibling;
@@ -144,15 +136,6 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
 
   // parent를 타고 올라간다.parent의 sibling이 있는 지점에서 멈춘다.
   let nextWork = nextUnitOfWork.parent;
-
-  // 블로그 코드
-  // let nextFiber = fiber
-  // while (nextFiber) {
-  //   if (nextFiber.sibling) {
-  //     return nextFiber.sibling
-  //   }
-  //   nextFiber = nextFiber.parent
-  // }
 
   while (true) {
     if (nextWork.sibling) {
@@ -175,6 +158,7 @@ function workLoop(deadline) {
   // nextUnitOfWork가 없을 경우 가상 DOM에 렌더링 완료
   // commit
   if (!nextUnitOfWork) {
+    commitRoot();
     currentRoot = wipRoot;
     wipRoot = null;
     return;
