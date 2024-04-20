@@ -141,36 +141,68 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   // Cursor를 sibling기반으로 찾아준다.
   // currentRoot에 effect를 달아준다.
   let currentCursor = alternate.props.children[0]; // 기준
-  let wipCursor = children[0]; // 비교대상
+  let wipChildren = children; // 비교대상 children
+  let wipCursor = wipChildren[0]; // 비교대상 커서
+
+  // currentCursor.sibling
+  // wipCursor.sibling
 
   while (currentCursor || wipCursor) {
-    // 1. DELETION -> wip.sibling.sibling...에서 type이 같은걸 못찾았을 때, currentCursor는 DELETION이다
-    // 2. PLACEMENT -> current wip type이 다름
-    // 3. UPDATE -> wip.type === current.type
+    if (currentCursor.type === wipCursor.type) {
+      // UPDATE
+      currentCursor.effectTag = "UPDATE";
+    } else {
+      let newFiber: Fiber = {
+        ...wipCursor,
+        sibling: currentCursor.sibling,
+        effectTag: "PLACEMENT",
+      };
+
+      currentCursor.sibling = newFiber;
+      currentCursor.effectTag = "DELETION";
+    }
+
+    /**
+     * @TODO
+     * currentCursor 또는 wipCursor가 없을 때, 나머지를 effectTag 채워주기
+     * 175~187 라인을 while문 안으로 (current children의 마지막에 이어줘야됨)
+     */
+
+    currentCursor = currentCursor.sibling;
+    wipCursor = wipCursor.sibling;
   }
-  // type, (props, state, component name)
-  // a b c(UPDATE -> d) d(DELETION) e(DELETION)
-  // a b d undefined undefiend
 
-  // child.index ???
+  // if (currentCursor) {
+  //   while (currentCursor) {
+  //     currentCursor.effectTag = "DELETION";
+  //     currentCursor = currentCursor.sibling;
+  //   }
+  // }
 
-  // update로 다 쳐버리고 나중에 개선하자?
+  // if (wipCursor) {
+  //   while (wipCursor) {
+  //     wipCursor.effectTag = "PLACEMENT";
+  //     wipCursor = wipCursor.sibling;
+  //   }
+  // }
 
   // <div>
   //   <a>aaa</a>
   //   <b>bbb</b>
-  //   <c>ccc</c>
+  //   <c>ccc</c> C
   //   <d>ddd</d>
-  //   <e>eee</e> // ??
+  //   <e>eee</e>
   // </div>
 
   // <div>
   //   <h>hhh</h>
   //   <a>aaa</a>
-  //   <b>bbb</b>
+  //   <b>bbb</b> W
   //   <d>ddd</d>
   //   <f>fff</f>
   // </div>
+
+  // codesandbox.io/p/sandbox/didact-6-96533?file=%2Fsrc%2Findex.js%3A182%2C1-238%2C2
 
   // PLACEMENT - 추가 - t
   // DELETION  - 삭제 -
