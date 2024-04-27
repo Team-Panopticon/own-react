@@ -132,25 +132,29 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
 
   const { alternate } = nextUnitOfWork;
 
-  // Fiber child === children[0]
-  // Fiber child.sibling === children[1]
-  // Fiber child.sibling.sibling === children[2]
-  // Fiber child.sibling.sibling.sibling === children[3]
-  // Fiber child.sibling.sibling.sibling.sibling ==> undefined
-
   // Cursor를 sibling기반으로 찾아준다.
   // currentRoot에 effect를 달아준다.
-  let currentCursor = alternate.props.children[0]; // 기준
+  let currentCursor = alternate?.props.children[0]; // 기준
   let wipChildren = children; // 비교대상 children
   let wipCursor = wipChildren[0]; // 비교대상 커서
 
-  // currentCursor.sibling
-  // wipCursor.sibling
-
   while (currentCursor || wipCursor) {
+    if (currentCursor && !wipCursor) {
+      currentCursor.effectTag = "DELETION";
+      currentCursor = currentCursor.sibling;
+      continue;
+    }
+
+    if (wipCursor && !currentCursor) {
+      wipCursor.effectTag = "PLACEMENT";
+      wipCursor = wipCursor.sibling;
+      continue;
+    }
+
     if (currentCursor.type === wipCursor.type) {
       // UPDATE
       currentCursor.effectTag = "UPDATE";
+      currentCursor.alternate = wipCursor;
     } else {
       let newFiber: Fiber = {
         ...wipCursor,
@@ -162,45 +166,10 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
       currentCursor.effectTag = "DELETION";
     }
 
-    /**
-     * @TODO
-     * currentCursor 또는 wipCursor가 없을 때, 나머지를 effectTag 채워주기
-     * 175~187 라인을 while문 안으로 (current children의 마지막에 이어줘야됨)
-     */
-
     currentCursor = currentCursor.sibling;
     wipCursor = wipCursor.sibling;
+    console.log("============");
   }
-
-  // if (currentCursor) {
-  //   while (currentCursor) {
-  //     currentCursor.effectTag = "DELETION";
-  //     currentCursor = currentCursor.sibling;
-  //   }
-  // }
-
-  // if (wipCursor) {
-  //   while (wipCursor) {
-  //     wipCursor.effectTag = "PLACEMENT";
-  //     wipCursor = wipCursor.sibling;
-  //   }
-  // }
-
-  // <div>
-  //   <a>aaa</a>
-  //   <b>bbb</b>
-  //   <c>ccc</c> C
-  //   <d>ddd</d>
-  //   <e>eee</e>
-  // </div>
-
-  // <div>
-  //   <h>hhh</h>
-  //   <a>aaa</a>
-  //   <b>bbb</b> W
-  //   <d>ddd</d>
-  //   <f>fff</f>
-  // </div>
 
   // codesandbox.io/p/sandbox/didact-6-96533?file=%2Fsrc%2Findex.js%3A182%2C1-238%2C2
 
