@@ -100,11 +100,80 @@ function commitRoot() {
   wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
 }
 
+function isProps(prop: string) {
+  return prop !== "children";
+}
+
+function isEvent(prop: string) {
+  return prop.startsWith("on");
+}
+
+function isNotEvent(prop: string) {
+  return isEvent(prop);
+}
+
+function updateDom(fiber: Fiber) {
+  const dom = fiber.dom;
+  const newProps = fiber.props;
+  const oldProps = fiber.alternate?.props;
+
+  // 1. 오래된 props를 지운다.
+  Object.keys(oldProps)
+    .filter(isProps)
+    .filter(isNotEvent)
+    .forEach((key) => (dom[key] = ""));
+  // 2. 새로운 props를 dom 추가한다.
+  Object.keys(newProps)
+    .filter(isProps)
+    .filter(isNotEvent)
+    .forEach((key) => (dom[key] = newProps[key]));
+  // 3. eventListener를 이전 이벤트를 제거한다.
+  Object.keys(oldProps)
+    .filter(isEvent)
+    .forEach((event) => {
+      dom.removeEventListener(
+        event.substring(2).toLowerCase(),
+        oldProps[event]
+      );
+    });
+  // 4. eventListener를 추가.
+  Object.keys(newProps)
+    .filter(isEvent)
+    .forEach((event) => {
+      dom.addEventListener(event.substring(2).toLowerCase(), newProps[event]);
+    });
+}
+
 function commitWork(currentFiber: Fiber) {
+  // dom(update) -> dom(update) -> dom(update) -> dom(update) -> dom(update - 진짜 글자가 바뀌었다.)
+
+  if (currentFiber.effectTag === "DELETION") {
+    currentFiber.parent.dom.appendChild(document.createDocumentFragment());
+  } else if (currentFiber.effectTag === "PLACEMENT") {
+    currentFiber.props.children.forEach((child) => {
+      commitWork(child);
+    });
+    currentFiber.parent.dom.appendChild(currentFiber.dom);
+  } else if (currentFiber.effectTag === "UPDATE") {
+    updateDom(currentFiber);
+  }
+
+  // <Shape type="box">
+  // return <div className={type}></div>
+  // <Shape type="circle">
+  // return <div className={type}></div>
+  // className, style, textNode
+  // children을 돌면서
+  // <div></div>
+  // <div dummy={state.Has} class="square" ></div>
+  // <div> class="circle"></div>
+
+  // class classList,remove(q) circle
+  // dom의
+
   currentFiber.props.children.forEach((child) => {
     commitWork(child);
   });
-  currentFiber.parent.dom.appendChild(currentFiber.dom);
 }
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
@@ -152,6 +221,8 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
     }
 
     if (currentCursor.type === wipCursor.type) {
+      // props를 돌면서 각 props가 바뀌었는지랑, children이 길이가 바뀌었는지, text 노드라면 nodeValue가 바뀌었는지
+      // (children.length && previous.length) && (isTextNode && nodeValue !== previous) && (Object.Keys(previos).every(key => props[key] === previos[key]))
       // UPDATE
       currentCursor.effectTag = "UPDATE";
       currentCursor.alternate = wipCursor;
@@ -168,7 +239,6 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
 
     currentCursor = currentCursor.sibling;
     wipCursor = wipCursor.sibling;
-    console.log("============");
   }
 
   // codesandbox.io/p/sandbox/didact-6-96533?file=%2Fsrc%2Findex.js%3A182%2C1-238%2C2
@@ -224,48 +294,54 @@ const Didact = {
   render,
 };
 
-/** @jsx Didact.createElement */
-const element = (
-  <div id="foo">
-    depth 1
-    <p>
-      depth 2 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This is A
-      <ab>depth 3 This is AB</ab> depth 2 Th
-    </p>
-    <c>depth 2 this is C</c>
-    <br />
-    tt
-    <div id="bar">
-      depth 1-1
-      <p>
-        depth 2-1 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This
-        is A<ab>depth 3 This is AB</ab> depth 2 Th
-      </p>
-      <c>depth 2-1 this is C</c>
-      <br />
-      tt
-    </div>
-  </div>
-);
+// /** @jsx Didact.createElement */
+// const element = (
+//   <div id="foo">
+//     depth 1
+//     <p>
+//       depth 2 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This is A
+//       <ab>depth 3 This is AB</ab> depth 2 Th
+//     </p>
+//     <c>depth 2 this is C</c>
+//     <br />
+//     tt
+//     <div id="bar">
+//       depth 1-1
+//       <p>
+//         depth 2-1 This is A<ab>depth 3 This is AB</ab> depth 2 Th depth 2 This
+//         is A<ab>depth 3 This is AB</ab> depth 2 Th
+//       </p>
+//       <c>depth 2-1 this is C</c>
+//       <br />
+//       tt
+//     </div>
+//   </div>
+// );
 
 /** @jsx Didact.createElement */
 const rootEl = document.getElementById("root");
 
-Didact.render(element, rootEl);
+// Didact.render(element, rootEl);
 
-// const updateValue = (e) => {
-//   rerender(e.target.value);
-// };
+const updateValue = (e) => {
+  console.log("update value"); // 이벤트가 동작하지 않음
+  rerender(e.target.value);
+};
 
-// const rerender = (value) => {
-//   const element = (
-//     <div>
-//       <input onInput={updateValue} value={value} />
-//       <h2>Hello {value}</h2>
-//     </div>
-//   );
+/**
+ * @TODO 아래 코드가 정상적으로 작동해야함.
+ * 인풋이 처음엔 그려지는데, 그 다음에는 그려지 않음. (이벤트 추가 안됨)
+ */
+const rerender = (value) => {
+  /** @jsx Didact.createElement */
+  const element = (
+    <div>
+      <input onInput={updateValue} value={value} />
+      <h2>Hello {value}</h2>
+    </div>
+  );
 
-//   Didact.render(element, rootEl);
-// };
+  Didact.render(element, rootEl);
+};
 
-// rerender("World");
+rerender("World");
