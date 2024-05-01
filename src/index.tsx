@@ -68,6 +68,11 @@ function createDOM(fiber: FiberWithoutDom) {
   const { children, ...props } = fiber.props;
 
   Object.entries(props).forEach(([key, value]) => (dom[key] = value));
+  Object.keys(props)
+    .filter(isEvent)
+    .forEach((event) => {
+      dom.addEventListener(event.substring(2).toLowerCase(), props[event]);
+    });
 
   return dom;
 }
@@ -83,7 +88,10 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
     alternate: currentRoot,
   };
 
+  console.log(">> render - wipRoot", wipRoot);
+
   nextUnitOfWork = wipRoot;
+  requestIdleCallback(workLoop);
 }
 
 let nextUnitOfWork: Fiber | null = null;
@@ -95,9 +103,8 @@ function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
 }
 
 function commitRoot() {
-  commitWork(wipRoot.props.children[0]);
-
-  wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
+  commitWork(currentRoot.props.children[0]);
+  wipRoot.dom.appendChild(currentRoot.props.children[0].dom);
 }
 
 function isProps(prop: string) {
@@ -116,6 +123,8 @@ function updateDom(fiber: Fiber) {
   const dom = fiber.dom;
   const newProps = fiber.props;
   const oldProps = fiber.alternate?.props;
+
+  console.log(">> updateDom", fiber);
 
   // 1. 오래된 props를 지운다.
   Object.keys(oldProps)
@@ -145,8 +154,7 @@ function updateDom(fiber: Fiber) {
 }
 
 function commitWork(currentFiber: Fiber) {
-  // dom(update) -> dom(update) -> dom(update) -> dom(update) -> dom(update - 진짜 글자가 바뀌었다.)
-
+  console.log("commitWork >> currentFiber: ", currentFiber);
   if (currentFiber.effectTag === "DELETION") {
     currentFiber.parent.dom.appendChild(document.createDocumentFragment());
   } else if (currentFiber.effectTag === "PLACEMENT") {
@@ -155,27 +163,21 @@ function commitWork(currentFiber: Fiber) {
     });
     currentFiber.parent.dom.appendChild(currentFiber.dom);
   } else if (currentFiber.effectTag === "UPDATE") {
+    currentFiber.props.children.forEach((child) => {
+      commitWork(child);
+    });
     updateDom(currentFiber);
   }
-
-  // <Shape type="box">
-  // return <div className={type}></div>
-  // <Shape type="circle">
-  // return <div className={type}></div>
-  // className, style, textNode
-  // children을 돌면서
-  // <div></div>
-  // <div dummy={state.Has} class="square" ></div>
-  // <div> class="circle"></div>
-
-  // class classList,remove(q) circle
-  // dom의
-
-  currentFiber.props.children.forEach((child) => {
-    commitWork(child);
-  });
 }
 
+/**
+ * @TODO
+ * wipRoot를 기준으로 돌고 있다.
+ * currentRoot와 wipRoot를 비교해서 wipRoot에 effectTag를 세팅해야한다.
+ * deletions 배열을 만들어서 currentRoot있지만 wipRoot에서 사라진 Fiber를 저장한다.
+ * commit 단계에서 deletions 배열을 돌면서 삭제를 실행한다.
+ * - 이렇게 해야 wipRoot는 현재 dom(html)의 구조와 일치하게 fiber를 가지고 있다.
+ */
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   console.log("==== perforn unit of work", nextUnitOfWork);
 
@@ -207,38 +209,54 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   let wipChildren = children; // 비교대상 children
   let wipCursor = wipChildren[0]; // 비교대상 커서
 
-  while (currentCursor || wipCursor) {
-    if (currentCursor && !wipCursor) {
-      currentCursor.effectTag = "DELETION";
-      currentCursor = currentCursor.sibling;
-      continue;
-    }
-
-    if (wipCursor && !currentCursor) {
+  if (!alternate) {
+    // ROOT
+    while (wipCursor) {
       wipCursor.effectTag = "PLACEMENT";
       wipCursor = wipCursor.sibling;
-      continue;
     }
+  } else {
+    while (currentCursor || wipCursor) {
+      if (currentCursor && !wipCursor) {
+        currentCursor.effectTag = "DELETION";
+        currentCursor = currentCursor.sibling;
+        continue;
+      }
 
-    if (currentCursor.type === wipCursor.type) {
-      // props를 돌면서 각 props가 바뀌었는지랑, children이 길이가 바뀌었는지, text 노드라면 nodeValue가 바뀌었는지
-      // (children.length && previous.length) && (isTextNode && nodeValue !== previous) && (Object.Keys(previos).every(key => props[key] === previos[key]))
-      // UPDATE
-      currentCursor.effectTag = "UPDATE";
-      currentCursor.alternate = wipCursor;
-    } else {
-      let newFiber: Fiber = {
-        ...wipCursor,
-        sibling: currentCursor.sibling,
-        effectTag: "PLACEMENT",
-      };
+      if (wipCursor && !currentCursor) {
+        const lastIndex = alternate?.props.children.length - 1;
+        let newFiber: Fiber = {
+          ...wipCursor,
+          effectTag: "PLACEMENT",
+        };
+        children.push(newFiber);
+        const last = alternate?.props.children[lastIndex];
+        last.sibling = newFiber;
 
-      currentCursor.sibling = newFiber;
-      currentCursor.effectTag = "DELETION";
+        wipCursor = wipCursor.sibling;
+        continue;
+      }
+
+      if (currentCursor.type === wipCursor.type) {
+        // props를 돌면서 각 props가 바뀌었는지랑, children이 길이가 바뀌었는지, text 노드라면 nodeValue가 바뀌었는지
+        // (children.length && previous.length) && (isTextNode && nodeValue !== previous) && (Object.Keys(previos).every(key => props[key] === previos[key]))
+        // UPDATE
+        currentCursor.effectTag = "UPDATE";
+        currentCursor.alternate = wipCursor;
+      } else {
+        let newFiber: Fiber = {
+          ...wipCursor,
+          sibling: currentCursor.sibling,
+          effectTag: "PLACEMENT",
+        };
+
+        currentCursor.sibling = newFiber;
+        currentCursor.effectTag = "DELETION";
+      }
+
+      currentCursor = currentCursor.sibling;
+      wipCursor = wipCursor.sibling;
     }
-
-    currentCursor = currentCursor.sibling;
-    wipCursor = wipCursor.sibling;
   }
 
   // codesandbox.io/p/sandbox/didact-6-96533?file=%2Fsrc%2Findex.js%3A182%2C1-238%2C2
@@ -277,17 +295,16 @@ function workLoop(deadline) {
   // nextUnitOfWork가 없을 경우 가상 DOM에 렌더링 완료
   // commit
   if (!nextUnitOfWork) {
+    if (!currentRoot) {
+      currentRoot = wipRoot;
+    }
     commitRoot();
-    currentRoot = wipRoot;
+    // currentRoot = wipRoot;
     wipRoot = null;
     return;
   }
   requestIdleCallback(workLoop);
 }
-
-// @ts-ignore
-window.startLoop = () => requestIdleCallback(workLoop);
-requestIdleCallback(workLoop);
 
 const Didact = {
   createElement,
@@ -324,7 +341,7 @@ const rootEl = document.getElementById("root");
 // Didact.render(element, rootEl);
 
 const updateValue = (e) => {
-  console.log("update value"); // 이벤트가 동작하지 않음
+  console.log("updateValue Function"); // 이벤트가 동작하지 않음
   rerender(e.target.value);
 };
 
