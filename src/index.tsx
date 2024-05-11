@@ -17,7 +17,7 @@ interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   /** root는 parent가 없음 */
   parent?: Fiber;
   alternate?: Fiber;
-  effectTag?: "PLACEMENT" | "DELETION" | "UPDATE";
+  effectTag?: "PLACEMENT" | "UPDATE";
 }
 
 type FiberWithoutDom = Fiber;
@@ -97,14 +97,18 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
 let nextUnitOfWork: Fiber | null = null;
 let wipRoot: Fiber | null = null; // 돔에 변경사항이 생겼을때 교정할거
 let currentRoot: Fiber | null = null; // currentRoot -> 완성이 되어있어있고 실제돔에도 적용되어 있음.
-const deletions: Fiber[] = [];
+let deletions: Fiber[] = [];
 
 function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
 function commitRoot() {
+  deletions.forEach((fiber) => {
+    fiber.parent.dom.removeChild(fiber.dom);
+  });
   commitWork(wipRoot.props.children[0]);
+  deletions = [];
   wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
 }
 
@@ -158,9 +162,6 @@ function updateDom(fiber: Fiber) {
 
 function commitWork(fiber: Fiber) {
   console.log("commitWork >> currentFiber: ", fiber);
-  // if (fiber.effectTag === "DELETION") {
-  //   fiber.parent.dom.appendChild(document.createDocumentFragment());
-  // } else
   if (fiber.effectTag === "PLACEMENT") {
     fiber.props.children.forEach((child) => {
       commitWork(child);
@@ -327,6 +328,7 @@ const rerender = (value) => {
     <div>
       <input onInput={updateValue} value={value} />
       <h2>Hello {value}</h2>
+      {value === "1" ? <h3>deletion</h3> : <h4>test</h4>}
     </div>
   );
 
