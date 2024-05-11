@@ -97,14 +97,15 @@ function render(fiber: FiberWithoutDom, rootElement: HTMLElement) {
 let nextUnitOfWork: Fiber | null = null;
 let wipRoot: Fiber | null = null; // 돔에 변경사항이 생겼을때 교정할거
 let currentRoot: Fiber | null = null; // currentRoot -> 완성이 되어있어있고 실제돔에도 적용되어 있음.
+const deletions: Fiber[] = [];
 
 function isHTMLElement(fiber: Fiber): fiber is Fiber<HTMLElement> {
   return fiber.type !== "TEXT_ELEMENT" ? true : false;
 }
 
 function commitRoot() {
-  commitWork(currentRoot.props.children[0]);
-  wipRoot.dom.appendChild(currentRoot.props.children[0].dom);
+  commitWork(wipRoot.props.children[0]);
+  wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
 }
 
 function isProps(prop: string) {
@@ -116,26 +117,28 @@ function isEvent(prop: string) {
 }
 
 function isNotEvent(prop: string) {
-  return isEvent(prop);
+  return !isEvent(prop);
 }
 
 function updateDom(fiber: Fiber) {
-  const dom = fiber.dom;
+  const dom = fiber.alternate.dom;
   const newProps = fiber.props;
   const oldProps = fiber.alternate?.props;
-
-  console.log(">> updateDom", fiber);
 
   // 1. 오래된 props를 지운다.
   Object.keys(oldProps)
     .filter(isProps)
     .filter(isNotEvent)
-    .forEach((key) => (dom[key] = ""));
+    .forEach((key) => {
+      dom[key] = "";
+    });
   // 2. 새로운 props를 dom 추가한다.
   Object.keys(newProps)
     .filter(isProps)
     .filter(isNotEvent)
-    .forEach((key) => (dom[key] = newProps[key]));
+    .forEach((key) => {
+      dom[key] = newProps[key];
+    });
   // 3. eventListener를 이전 이벤트를 제거한다.
   Object.keys(oldProps)
     .filter(isEvent)
@@ -153,31 +156,24 @@ function updateDom(fiber: Fiber) {
     });
 }
 
-function commitWork(currentFiber: Fiber) {
-  console.log("commitWork >> currentFiber: ", currentFiber);
-  if (currentFiber.effectTag === "DELETION") {
-    currentFiber.parent.dom.appendChild(document.createDocumentFragment());
-  } else if (currentFiber.effectTag === "PLACEMENT") {
-    currentFiber.props.children.forEach((child) => {
+function commitWork(fiber: Fiber) {
+  console.log("commitWork >> currentFiber: ", fiber);
+  // if (fiber.effectTag === "DELETION") {
+  //   fiber.parent.dom.appendChild(document.createDocumentFragment());
+  // } else
+  if (fiber.effectTag === "PLACEMENT") {
+    fiber.props.children.forEach((child) => {
       commitWork(child);
     });
-    currentFiber.parent.dom.appendChild(currentFiber.dom);
-  } else if (currentFiber.effectTag === "UPDATE") {
-    currentFiber.props.children.forEach((child) => {
+    fiber.parent.dom.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE") {
+    fiber.props.children.forEach((child) => {
       commitWork(child);
     });
-    updateDom(currentFiber);
+    updateDom(fiber);
   }
 }
 
-/**
- * @TODO
- * wipRoot를 기준으로 돌고 있다.
- * currentRoot와 wipRoot를 비교해서 wipRoot에 effectTag를 세팅해야한다.
- * deletions 배열을 만들어서 currentRoot있지만 wipRoot에서 사라진 Fiber를 저장한다.
- * commit 단계에서 deletions 배열을 돌면서 삭제를 실행한다.
- * - 이렇게 해야 wipRoot는 현재 dom(html)의 구조와 일치하게 fiber를 가지고 있다.
- */
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   console.log("==== perforn unit of work", nextUnitOfWork);
 
@@ -205,60 +201,39 @@ function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
 
   // Cursor를 sibling기반으로 찾아준다.
   // currentRoot에 effect를 달아준다.
-  let currentCursor = alternate?.props.children[0]; // 기준
+  let currentCursor = alternate?.props.children[0]; // 기준 <- root
   let wipChildren = children; // 비교대상 children
   let wipCursor = wipChildren[0]; // 비교대상 커서
 
-  if (!alternate) {
-    // ROOT
-    while (wipCursor) {
+  while (currentCursor || wipCursor) {
+    if (currentCursor && !wipCursor) {
+      deletions.push(currentCursor);
+      currentCursor = currentCursor.sibling;
+      continue;
+    }
+
+    if (wipCursor && !currentCursor) {
       wipCursor.effectTag = "PLACEMENT";
       wipCursor = wipCursor.sibling;
+      continue;
     }
-  } else {
-    while (currentCursor || wipCursor) {
-      if (currentCursor && !wipCursor) {
-        currentCursor.effectTag = "DELETION";
-        currentCursor = currentCursor.sibling;
-        continue;
-      }
 
-      if (wipCursor && !currentCursor) {
-        const lastIndex = alternate?.props.children.length - 1;
-        let newFiber: Fiber = {
-          ...wipCursor,
-          effectTag: "PLACEMENT",
-        };
-        children.push(newFiber);
-        const last = alternate?.props.children[lastIndex];
-        last.sibling = newFiber;
+    if (currentCursor.type === wipCursor.type) {
+      // props를 돌면서 각 props가 바뀌었는지랑, children이 길이가 바뀌었는지, text 노드라면 nodeValue가 바뀌었는지
+      // (children.length && previous.length) && (isTextNode && nodeValue !== previous) && (Object.Keys(previos).every(key => props[key] === previos[key]))
+      // UPDATE
 
-        wipCursor = wipCursor.sibling;
-        continue;
-      }
-
-      if (currentCursor.type === wipCursor.type) {
-        // props를 돌면서 각 props가 바뀌었는지랑, children이 길이가 바뀌었는지, text 노드라면 nodeValue가 바뀌었는지
-        // (children.length && previous.length) && (isTextNode && nodeValue !== previous) && (Object.Keys(previos).every(key => props[key] === previos[key]))
-        // UPDATE
-        currentCursor.effectTag = "UPDATE";
-        currentCursor.alternate = wipCursor;
-      } else {
-        let newFiber: Fiber = {
-          ...wipCursor,
-          sibling: currentCursor.sibling,
-          effectTag: "PLACEMENT",
-        };
-
-        currentCursor.sibling = newFiber;
-        currentCursor.effectTag = "DELETION";
-      }
-
-      currentCursor = currentCursor.sibling;
-      wipCursor = wipCursor.sibling;
+      wipCursor.effectTag = "UPDATE";
+      wipCursor.dom = currentCursor.dom;
+      wipCursor.alternate = currentCursor;
+    } else {
+      deletions.push(currentCursor);
+      wipCursor.effectTag = "PLACEMENT";
     }
+
+    currentCursor = currentCursor.sibling;
+    wipCursor = wipCursor.sibling;
   }
-
   // codesandbox.io/p/sandbox/didact-6-96533?file=%2Fsrc%2Findex.js%3A182%2C1-238%2C2
 
   // PLACEMENT - 추가 - t
@@ -295,11 +270,8 @@ function workLoop(deadline) {
   // nextUnitOfWork가 없을 경우 가상 DOM에 렌더링 완료
   // commit
   if (!nextUnitOfWork) {
-    if (!currentRoot) {
-      currentRoot = wipRoot;
-    }
     commitRoot();
-    // currentRoot = wipRoot;
+    currentRoot = wipRoot;
     wipRoot = null;
     return;
   }
