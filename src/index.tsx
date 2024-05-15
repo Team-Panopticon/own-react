@@ -233,31 +233,25 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 
+const useState = (initialState: any) => {
+  const state = initialState;
+  const setState = () => {};
+
+  return [state, setState];
+};
+
 const Didact = {
   createElement,
   render,
+  useState,
 };
 
 /** @jsx Didact.createElement */
-const rootEl = document.getElementById("root");
+function Counter() {
+  const [state, setState] = Didact.useState(1);
 
-// Didact.render(element, rootEl);
-
-const updateValue = (e) => {
-  rerender(e.target.value);
-};
-
-const rerender = (value) => {
-  /** @jsx Didact.createElement */
-  const element = (
-    <div>
-      <input onInput={updateValue} value={value} />
-      <h2>Hello {value}</h2>
-      {value === "1" ? <h3>deletion</h3> : <h4>test</h4>}
-    </div>
-  );
-
-  Didact.render(element, rootEl);
-};
-
-rerender("World");
+  return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
+}
+const element = <Counter />;
+const container = document.getElementById("root");
+Didact.render(element, container);
