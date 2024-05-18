@@ -5,6 +5,10 @@ export interface Props {
 }
 
 type FunctionComponent = (props: any) => Fiber;
+
+export type SetStateAction = <T>(value: T) => void;
+type Hook = <T>(initialValue: T) => [T, SetStateAction];
+
 export interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   type: string | FunctionComponent;
   props: Props;
@@ -15,6 +19,7 @@ export interface Fiber<T = HTMLElement | Text | DocumentFragment> {
   parent?: Fiber;
   alternate?: Fiber;
   effectTag?: "PLACEMENT" | "UPDATE";
+  hooks?: Hook[];
 }
 
 export type FiberWithoutDom = Fiber;

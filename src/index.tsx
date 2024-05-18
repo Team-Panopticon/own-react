@@ -243,11 +243,30 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 
-const useState = (initialState: any) => {
-  let state = initialState;
-  const setState = (value: any) => {};
+/**
+ * 1. 상태는 컴포넌트 Fiber의 hooks에 들어간다.
+ *    - useState가 호출됬을 때 어떻게 Fiber를 참조할 것인가
+ *
+ */
 
-  return [state, setState];
+let wipFiber: Fiber;
+let hookIndex: number;
+
+function updateFunction(nextUnitOfWork: Fiber) {
+  wipFiber = nextUnitOfWork;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+
+  // @ts-ignore
+  const result = nextUnitOfWork.type(nextUnitOfWork.props);
+  nextUnitOfWork.props.children = result;
+}
+
+/** @TODO hooks 배열에서 hook을 찾아서 반환해야함.  */
+const useState = <T,>(initialState: T) => {
+  const old = wipFiber.alternate;
+  const setState = (value: any) => {};
+  // return [state, setState];
 };
 
 const Didact = {
