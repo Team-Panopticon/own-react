@@ -35,11 +35,10 @@ function createDOM(fiber: FiberWithoutDom) {
   const { type } = fiber;
 
   const dom = (() => {
-    switch (type) {
-      case "TEXT_ELEMENT":
-        return document.createTextNode("");
-      default:
-        return document.createElement(type);
+    if (type === "TEXT_ELEMENT") {
+      return document.createTextNode("");
+    } else if (typeof type === "string") {
+      return document.createElement(type);
     }
   })();
 
@@ -76,12 +75,14 @@ let currentRoot: Fiber | null = null; // currentRoot -> 완성이 되어있어�
 let deletions: Fiber[] = [];
 
 function commitRoot() {
+  /** @TODO 돔이 없는 경우 부모 돔에서 찾아서 삭제시켜줘야함. */
   deletions.forEach((fiber) => {
     fiber.parent.dom.removeChild(fiber.dom);
   });
   commitWork(wipRoot.props.children[0]);
   deletions = [];
-  wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
+  wipRoot.props.children[0].dom &&
+    wipRoot.dom.appendChild(wipRoot.props.children[0].dom);
 }
 
 function isProps(prop: string) {
@@ -133,11 +134,16 @@ function updateDom(fiber: Fiber) {
 }
 
 function commitWork(fiber: Fiber) {
+  console.log("Commit Work >> ", fiber);
   if (fiber.effectTag === "PLACEMENT") {
     fiber.props.children.forEach((child) => {
       commitWork(child);
     });
-    fiber.parent.dom.appendChild(fiber.dom);
+    let target = fiber;
+    while (!target.parent.dom) {
+      target = target.parent;
+    }
+    fiber.dom && target.parent.dom.appendChild(fiber.dom);
   } else if (fiber.effectTag === "UPDATE") {
     fiber.props.children.forEach((child) => {
       commitWork(child);
@@ -147,8 +153,12 @@ function commitWork(fiber: Fiber) {
 }
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
-  // wipRoot일 경우 createDom을 해주지 않으려고 (wipRoot.dom에 rootElement가 이미 있어서서)
-  if (!nextUnitOfWork.dom) {
+  console.log("Perforn unit of work >> ", nextUnitOfWork);
+  if (typeof nextUnitOfWork.type === "function") {
+    const result = nextUnitOfWork.type(nextUnitOfWork.props);
+    nextUnitOfWork.props.children = [result];
+  } else if (!nextUnitOfWork.dom) {
+    // wipRoot일 경우 createDom을 해주지 않으려고 (wipRoot.dom에 rootElement가 이미 있어서서)
     nextUnitOfWork.dom = createDOM(nextUnitOfWork);
   }
 
@@ -234,8 +244,8 @@ function workLoop(deadline) {
 }
 
 const useState = (initialState: any) => {
-  const state = initialState;
-  const setState = () => {};
+  let state = initialState;
+  const setState = (value: any) => {};
 
   return [state, setState];
 };
@@ -248,9 +258,10 @@ const Didact = {
 
 /** @jsx Didact.createElement */
 function Counter() {
-  const [state, setState] = Didact.useState(1);
+  // const [state, setState] = Didact.useState(1);
 
-  return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
+  // return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
+  return <h1>Counter Function Component</h1>;
 }
 const element = <Counter />;
 const container = document.getElementById("root");
