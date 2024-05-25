@@ -77,7 +77,14 @@ let deletions: Fiber[] = [];
 function commitRoot() {
   /** @TODO 돔이 없는 경우 부모 돔에서 찾아서 삭제시켜줘야함. */
   deletions.forEach((fiber) => {
-    fiber.parent.dom.removeChild(fiber.dom);
+    // let target = fiber;
+    // // Counter (deleted parent)
+    // // Deleted
+    // // Deleted -> children -> html
+    // while (!target.dom) {
+    //   target = fiber.props.children[0];
+    // }
+    // fiber.parent.dom.removeChild(fiber.dom);
   });
   commitWork(wipRoot.props.children[0]);
   deletions = [];
@@ -289,10 +296,25 @@ const Didact = {
 };
 
 /** @jsx Didact.createElement */
+const Deleted2 = () => {
+  return <div>deleted2</div>;
+};
+
+/** @jsx Didact.createElement */
+const Deleted = () => {
+  return <Deleted2 />;
+};
+
+/** @jsx Didact.createElement */
 function Counter() {
   const [state, setState] = Didact.useState(1);
 
-  return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
+  return (
+    <h1 onClick={() => setState((c) => c + 1)}>
+      Count: {state}
+      {state !== 2 && <Deleted />}
+    </h1>
+  );
 }
 
 const container = document.getElementById("root");
