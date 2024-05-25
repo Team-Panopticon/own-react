@@ -148,15 +148,16 @@ function commitWork(fiber: Fiber) {
     fiber.props.children.forEach((child) => {
       commitWork(child);
     });
-    updateDom(fiber);
+    fiber.dom && updateDom(fiber);
   }
 }
 
 function performUnitOfWork(nextUnitOfWork: Fiber): Fiber {
   console.log("Perforn unit of work >> ", nextUnitOfWork);
   if (typeof nextUnitOfWork.type === "function") {
-    const result = nextUnitOfWork.type(nextUnitOfWork.props);
-    nextUnitOfWork.props.children = [result];
+    updateFunction(nextUnitOfWork);
+    // const result = nextUnitOfWork.type(nextUnitOfWork.props);
+    // nextUnitOfWork.props.children = [result];
   } else if (!nextUnitOfWork.dom) {
     // wipRoot일 경우 createDom을 해주지 않으려고 (wipRoot.dom에 rootElement가 이미 있어서서)
     nextUnitOfWork.dom = createDOM(nextUnitOfWork);
@@ -259,14 +260,26 @@ function updateFunction(nextUnitOfWork: Fiber) {
 
   // @ts-ignore
   const result = nextUnitOfWork.type(nextUnitOfWork.props);
-  nextUnitOfWork.props.children = result;
+
+  nextUnitOfWork.props.children = [result];
 }
 
-/** @TODO hooks 배열에서 hook을 찾아서 반환해야함.  */
 const useState = <T,>(initialState: T) => {
-  const old = wipFiber.alternate;
-  const setState = (value: any) => {};
-  // return [state, setState];
+  const next = wipFiber;
+  const oldState = wipFiber.alternate?.hooks[hookIndex];
+  console.log("useState >> ", next, oldState);
+
+  const setStateAction = (v: T) => (f: (prev: T) => T) => {
+    next.hooks[hookIndex++] = f(v);
+
+    rerender();
+  };
+
+  if (oldState) {
+    return [oldState, setStateAction(oldState)];
+  } else {
+    return [initialState, setStateAction(initialState)];
+  }
 };
 
 const Didact = {
@@ -277,11 +290,14 @@ const Didact = {
 
 /** @jsx Didact.createElement */
 function Counter() {
-  // const [state, setState] = Didact.useState(1);
+  const [state, setState] = Didact.useState(1);
 
-  // return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
-  return <h1>Counter Function Component</h1>;
+  return <h1 onClick={() => setState((c) => c + 1)}>Count: {state}</h1>;
 }
-const element = <Counter />;
+
 const container = document.getElementById("root");
-Didact.render(element, container);
+const rerender = () => {
+  const element = <Counter />;
+  Didact.render(element, container);
+};
+rerender();
